@@ -7,6 +7,7 @@ public enum ScanError {
     SHEET_NOT_FOUND("Blatt nicht erkannt. Bitte die ScanGolf-Vorlage gerade und vollständig auflegen."),
     MARKS_INCOMPLETE("Eine Ecke der Vorlage fehlt oder ist verdeckt. Bitte alle vier Ecken frei lassen."),
     FIELD_EMPTY("Auf dem Blatt ist noch keine Bahn gezeichnet."),
+    GRAYSCALE_SCAN("Der Scan ist schwarzweiß. Bitte in Farbe scannen, damit Start, Loch und Wasser erkannt werden."),
     NO_START("Kein Startpunkt gefunden. Bitte einen roten Punkt zeichnen."),
     MULTIPLE_STARTS("Bitte nur einen roten Punkt zeichnen."),
     NO_HOLE("Kein Loch gefunden. Bitte einen grünen Punkt zeichnen."),

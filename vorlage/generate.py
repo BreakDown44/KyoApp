@@ -55,6 +55,11 @@ PAR_BOX_INSET = 1.3          # Innenrand, der beim Auswerten ignoriert wird
 
 NAME_INSET = 1.2
 
+LOGO_BASE = (FIELD_X, 26.0)  # linke Grundlinie des Logos
+# Farbkontrollfeld: grüner Kreis im Logo. Fehlt dort jede Farbe (und im Feld auch),
+# wurde schwarzweiß gescannt.
+COLOR_REF = (LOGO_BASE[0] + 5.0, LOGO_BASE[1] - 4.2, 5.0)
+
 
 def mark_rects():
     lo = MARK_INSET
@@ -107,6 +112,8 @@ def template_dict():
             for (p, x, y, w, h) in par_boxes()
         ],
         "par_default": 3,
+        "color_ref": {"cx": COLOR_REF[0], "cy": COLOR_REF[1], "r": COLOR_REF[2],
+                      "sample_r": COLOR_REF[2] * 0.8},
     }
 
 
@@ -197,7 +204,7 @@ def draw_template(ctx):
             draw_finder(ctx, x, y)
 
     # Kopfzeile
-    draw_logo(ctx, FIELD_X, 26.0)
+    draw_logo(ctx, LOGO_BASE[0], LOGO_BASE[1])
     ctx.set_source_rgb(0.35, 0.35, 0.35)
     _text(ctx, "Dein Name", NAME_BOX[0] + 1.0, NAME_BOX[1] - 1.6, 3.0)
     _text(ctx, "Name der Bahn", LANE_BOX[0] + 1.0, LANE_BOX[1] - 1.6, 3.0)

@@ -107,7 +107,12 @@ public class ScanImagesTest implements CaseProvider {
         Check.equal(truth(truth, "has_name"), r.level().nameImage() != null, ctx + ": Namensfeld erkannt");
         Check.equal(truth(truth, "has_lane"), r.level().laneImage() != null, ctx + ": Bahnfeld erkannt");
 
-        checkWalls(truth, g, ctx);
+        if (Boolean.FALSE.equals(e.get("walls_detectable"))) {
+            // Wände bewusst zu hell: es darf keine einzige Wandzelle entstehen (keine Zufallswände)
+            Check.equal(0, g.count(CellType.WALL), ctx + ": hellgraue Linien dürfen keine Wand werden");
+        } else {
+            checkWalls(truth, g, ctx);
+        }
         checkWater(truth, g, ctx);
         checkDotCells(g, CellType.START, start, 7.0, ctx);
         checkDotCells(g, CellType.HOLE, hole, 7.0, ctx);

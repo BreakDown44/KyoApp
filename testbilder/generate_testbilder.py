@@ -163,6 +163,47 @@ def random_photo(w, h, seed):
     return add_noise(img, 10, seed)
 
 
+def perspective(img, k):
+    """Trapezverzerrung wie bei einem schräg gehaltenen Handyfoto (k = relative Verkürzung oben)."""
+    w, h = img.size
+    dx = w * k
+    # Koeffizienten für Image.transform(PERSPECTIVE): Ziel -> Quelle
+    src = [(0, 0), (w, 0), (w, h), (0, h)]
+    dst = [(dx, 0), (w - dx, 0), (w, h), (0, h)]
+    a = []
+    b = []
+    for (x, y), (u, v) in zip(dst, src):
+        a.append([x, y, 1, 0, 0, 0, -u * x, -u * y])
+        a.append([0, 0, 0, x, y, 1, -v * x, -v * y])
+        b += [u, v]
+    coeffs = solve(a, b)
+    return img.transform((w, h), Image.Transform.PERSPECTIVE, coeffs, Image.Resampling.BICUBIC,
+                         fillcolor=(255, 255, 255))
+
+
+def solve(a, b):
+    n = len(b)
+    m = [row[:] + [b[i]] for i, row in enumerate(a)]
+    for c in range(n):
+        p = max(range(c, n), key=lambda r: abs(m[r][c]))
+        m[c], m[p] = m[p], m[c]
+        for r in range(n):
+            if r != c:
+                f = m[r][c] / m[c][c]
+                for k in range(c, n + 1):
+                    m[r][k] -= f * m[c][k]
+    return [m[i][n] / m[i][i] for i in range(n)]
+
+
+def shadow(img, strength):
+    """Helligkeitsverlauf von links (dunkel) nach rechts, z. B. hochstehender Buchrücken."""
+    w, h = img.size
+    grad = Image.linear_gradient("L").rotate(90).resize((w, h))
+    lut = [int(255 * (1 - strength) + v * strength) for v in range(256)]
+    g = grad.point(lut)
+    return ImageChops.multiply(img, Image.merge("RGB", (g, g, g)))
+
+
 # ---------------------------------------------------------------- eigene Bahnen
 
 EX = tpl.EXAMPLE
@@ -317,6 +358,7 @@ def main():
          fmt="JPEG", quality=60)
     save(blur(darken(rotate_exact(b200, 2), 1.2, 0.85), 1.2), "beispiel-200dpi-dunkel-unscharf.png",
          positive(EX, "200 dpi, 180°, dunkel, unscharf", dpi=200))
+    save(shadow(b, 0.7), "beispiel-schatten.png", positive(EX, "Helligkeitsverlauf 30..100 %", dpi=300))
 
     print("Eigene Bahnen:")
     for d in (SCHRAEG, DUENN, LUECKEN, GEWUNDEN, WASSER):
@@ -333,6 +375,12 @@ def main():
                   expect_par=3, expect_warnings=["PAR_MULTIPLE"]))
     ohne = variant(EX, id="ohne-namen", name_text=None, lane_text=None, par=[2])
     save(render(ohne), "bahn-ohne-namen.png", positive(ohne, "Name und Bahn leer", dpi=300))
+    hell = variant(EX, id="hellgraue-waende")
+    for wl in hell["walls"]:
+        wl["rgb"] = (0.62, 0.62, 0.62)
+    save(render(hell), "bahn-hellgraue-waende.png",
+         positive(hell, "Wände nur hellgrau (62 %): nicht als Wand, aber Warnung", dpi=300,
+                  expect_warnings=["FAINT_LINES"], walls_detectable=False))
     save(render(START_NAH_WAND), "bahn-start-nah-wand.png",
          positive(START_NAH_WAND, "Start berührt fast die Wand", dpi=300,
                   start_tolerance=4.0, expect_warnings=["START_MOVED"]))
@@ -367,6 +415,8 @@ def main():
     ImageDraw.Draw(cut3).rectangle([b.size[0] - 330, b.size[1] - 330, b.size[0], b.size[1]], fill=(255, 255, 255))
     save(cut3, "neg-block-fehlt.png", negative("MARKS_INCOMPLETE", "Block unten rechts verdeckt"))
     save(ImageOps.mirror(b), "neg-gespiegelt.png", negative("SHEET_NOT_FOUND", "gespiegelter Scan"))
+    save(b.convert("L").convert("RGB"), "neg-graustufen.png", negative("GRAYSCALE_SCAN", "schwarzweiß gescannt"))
+    save(perspective(b, 0.05), "neg-verzerrt.png", negative("SHEET_NOT_FOUND", "schräg fotografiert (Trapez 5 %)"))
     save(Image.new("RGB", (2480, 3508), (255, 255, 255)), "neg-weiss.png",
          negative("SHEET_NOT_FOUND", "komplett weiß"))
     save(Image.new("RGB", (120, 80), (200, 200, 200)), "neg-winzig.png",

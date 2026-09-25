@@ -31,6 +31,8 @@ public final class ScanAnalyzer {
     static final int MIN_DOT_CELLS = 6;
     /** Füllgrad, ab dem ein Par-Kästchen als angekreuzt gilt. */
     static final double PAR_MARK_FILL = 0.08;
+    /** Kantenlänge der Kacheln für das lokale Papierweiß (Schatten, Verläufe). */
+    static final double TILE_MM = 12.0;
 
     // Klassen einer Einzelprobe
     static final int PAPER = 0;
@@ -39,6 +41,8 @@ public final class ScanAnalyzer {
     static final int GREEN = 3;
     static final int BLUE = 4;
     static final int OTHER = 5;
+    /** Unbunt, heller als Wandtinte, aber deutlich dunkler als Papier (Bleistift, blasser Stift). */
+    static final int FAINT = 6;
 
     // Ergebniscodes der Blattsuche
     private static final int FOUND = 0;
@@ -47,6 +51,7 @@ public final class ScanAnalyzer {
     private static final int MIRRORED = 3;
     private static final int BLOCK_MISSING = 4;
     private static final int BLOCK_WRONG = 5;
+    private static final int DISTORTED = 6;
 
     private final SheetTemplate t;
 
@@ -56,10 +61,12 @@ public final class ScanAnalyzer {
     private int imgH;
     private Affine map;
     private int kernel;
-    private final int[] lutR = new int[256];
-    private final int[] lutG = new int[256];
-    private final int[] lutB = new int[256];
+    /** Papierweiß je Kachel (RGB), Kacheln à TILE_MM über dem Spielfeld. */
+    private int[] tileWhite;
+    private int tilesX;
+    private int tilesY;
     private final int[] rgbTmp = new int[3];
+    private final int[] whiteTmp = new int[3];
 
     public ScanAnalyzer(SheetTemplate template) {
         this.t = template;
@@ -122,6 +129,7 @@ public final class ScanAnalyzer {
         int f = Math.max(1, (int) Math.floor(t.module * pxPerMmGuess / 6.0));
         while (true) {
             WorkImage wi = WorkImage.downsample(px, imgW, imgH, f);
+            wi.flattenIllumination();
             r.workingBytes += wi.gray.length;
             r.workFactor = f;
             int res = locate(wi, r);
@@ -141,8 +149,12 @@ public final class ScanAnalyzer {
                     r.detail = "Blatt ist gespiegelt";
                     r.error(ScanError.SHEET_NOT_FOUND);
                     break;
+                case DISTORTED:
+                    r.detail = "Suchmuster gefunden, aber verzerrt angeordnet (schräg fotografiert?)";
+                    r.error(ScanError.SHEET_NOT_FOUND);
+                    break;
                 case BLOCK_WRONG:
-                    r.detail = "Kontrollblock unten rechts passt nicht zur Lage der Marken";
+                    r.detail = "Kontrollblock unten rechts passt nicht zur Lage der Marken (Blatt verzerrt oder schräg fotografiert?)";
                     r.error(ScanError.SHEET_NOT_FOUND);
                     break;
                 default:
@@ -217,7 +229,12 @@ public final class ScanAnalyzer {
             }
         }
         if (best == null) {
-            return hasValidPair(cands) ? PAIR_ONLY : NOTHING;
+            if (!hasValidPair(cands)) {
+                return NOTHING;
+            }
+            // Drei oder mehr gleich große Suchmuster, aber keine passende Anordnung:
+            // eher ein verzerrtes Blatt als eine fehlende Ecke.
+            return consistentCount(cands) >= 3 ? DISTORTED : PAIR_ONLY;
         }
         if (bestMirrored) {
             return MIRRORED;
@@ -285,6 +302,23 @@ public final class ScanAnalyzer {
         return false;
     }
 
+    /** Größte Anzahl Kandidaten mit untereinander passender Modulgröße. */
+    private static int consistentCount(List<FinderPattern> c) {
+        int best = 0;
+        for (int i = 0; i < c.size(); i++) {
+            int n = 0;
+            for (int j = 0; j < c.size(); j++) {
+                double a = c.get(i).module;
+                double b = c.get(j).module;
+                if (Math.max(a, b) <= Math.min(a, b) * 1.25) {
+                    n++;
+                }
+            }
+            best = Math.max(best, n);
+        }
+        return best;
+    }
+
     private static void sortByCount(List<FinderPattern> l) {
         for (int i = 1; i < l.size(); i++) {
             FinderPattern v = l.get(i);
@@ -312,7 +346,7 @@ public final class ScanAnalyzer {
         if (bx - inner < 0 || by - inner < 0 || bx + inner >= wi.w || by + inner >= wi.h) {
             return BLOCK_MISSING;
         }
-        int half = (int) Math.ceil(size * 1.25);
+        int half = (int) Math.ceil(size * 1.9);
         int x0 = Math.max(0, (int) bx - half);
         int y0 = Math.max(0, (int) by - half);
         int x1 = Math.min(wi.w - 1, (int) bx + half);
@@ -334,7 +368,7 @@ public final class ScanAnalyzer {
         int thr = (dark + light) / 2;
         // Startpunkt: dunkles Pixel nahe der Vorhersage
         int seed = -1;
-        double bestD = size * 0.4;
+        double bestD = size * 1.2;
         int rr = (int) Math.ceil(bestD);
         for (int dy = -rr; dy <= rr; dy++) {
             for (int dx = -rr; dx <= rr; dx++) {
@@ -465,7 +499,11 @@ public final class ScanAnalyzer {
         }
     }
 
-    /** Papierweiß: mittlere Farbe der hellsten 20 % der Zellmitten im Feld. */
+    /**
+     * Papierweiß schätzen: zuerst global (hellste 20 % der Zellmitten), dann je 12-mm-Kachel aus den
+     * unbunten, hellen Proben. Jede Kachel übernimmt das hellste Weiß ihrer 5x5-Nachbarschaft, damit
+     * ganz bemalte Kacheln (z. B. großer Teich) nicht als "Papier" gelten.
+     */
     private void estimatePaper(ScanResult r) {
         int cols = (int) Math.round(t.field.w / CELL_MM);
         int rows = (int) Math.round(t.field.h / CELL_MM);
@@ -480,35 +518,133 @@ public final class ScanAnalyzer {
                 hist[WorkImage.luminance(v)]++;
             }
         }
-        int l80 = WorkImage.percentile(hist, rgb.length, 0.80);
-        long sr = 0;
-        long sg = 0;
-        long sb = 0;
-        int n = 0;
-        for (int i = 0; i < rgb.length; i++) {
-            if (WorkImage.luminance(rgb[i]) >= l80) {
-                sr += (rgb[i] >> 16) & 0xFF;
-                sg += (rgb[i] >> 8) & 0xFF;
-                sb += rgb[i] & 0xFF;
-                n++;
+        int global = brightMean(rgb, 0, 0, cols, rows, cols, hist, 0.80, 0);
+        r.paperRgb = global;
+        tilesX = (int) Math.ceil(t.field.w / TILE_MM);
+        tilesY = (int) Math.ceil(t.field.h / TILE_MM);
+        int tc = (int) Math.round(TILE_MM / CELL_MM);
+        int[] cand = new int[tilesX * tilesY];
+        for (int ty = 0; ty < tilesY; ty++) {
+            for (int tx = 0; tx < tilesX; tx++) {
+                cand[ty * tilesX + tx] = brightMean(rgb, tx * tc, ty * tc, Math.min(cols, tx * tc + tc),
+                        Math.min(rows, ty * tc + tc), cols, null, 0.75, global);
             }
         }
-        int wr = Math.max(20, (int) (sr / n));
-        int wg = Math.max(20, (int) (sg / n));
-        int wb = Math.max(20, (int) (sb / n));
-        r.paperRgb = (wr << 16) | (wg << 8) | wb;
-        for (int v = 0; v < 256; v++) {
-            lutR[v] = Math.min(255, v * 255 / wr);
-            lutG[v] = Math.min(255, v * 255 / wg);
-            lutB[v] = Math.min(255, v * 255 / wb);
+        tileWhite = new int[cand.length];
+        for (int ty = 0; ty < tilesY; ty++) {
+            for (int tx = 0; tx < tilesX; tx++) {
+                int best = -1;
+                int bestL = -1;
+                for (int dy = -2; dy <= 2; dy++) {
+                    for (int dx = -2; dx <= 2; dx++) {
+                        int x = tx + dx;
+                        int y = ty + dy;
+                        if (x < 0 || y < 0 || x >= tilesX || y >= tilesY || cand[y * tilesX + x] < 0) {
+                            continue;
+                        }
+                        int l = WorkImage.luminance(cand[y * tilesX + x]);
+                        if (l > bestL) {
+                            bestL = l;
+                            best = cand[y * tilesX + x];
+                        }
+                    }
+                }
+                tileWhite[ty * tilesX + tx] = best < 0 ? global : best;
+            }
         }
     }
 
-    /** Klassifiziert eine Probe (Rohwerte), relativ zum geschätzten Papierweiß. */
-    int classify(int r0, int g0, int b0) {
-        int r = lutR[r0];
-        int g = lutG[g0];
-        int b = lutB[b0];
+    /**
+     * Mittlere Farbe der hellsten Proben eines Bereichs (Perzentil p der Helligkeit).
+     * Mit ref != 0 zählen nur Proben, die relativ zu ref unbunt sind; ohne solche: -1.
+     */
+    private static int brightMean(int[] rgb, int x0, int y0, int x1, int y1, int stride, int[] histIn,
+                                  double p, int ref) {
+        int[] hist = histIn;
+        int n = 0;
+        if (hist == null) {
+            hist = new int[256];
+            for (int y = y0; y < y1; y++) {
+                for (int x = x0; x < x1; x++) {
+                    int v = rgb[y * stride + x];
+                    if (ref == 0 || achromatic(v, ref)) {
+                        hist[WorkImage.luminance(v)]++;
+                        n++;
+                    }
+                }
+            }
+        } else {
+            for (int i = 0; i < 256; i++) {
+                n += hist[i];
+            }
+        }
+        if (n == 0) {
+            return -1;
+        }
+        int lp = WorkImage.percentile(hist, n, p);
+        long sr = 0;
+        long sg = 0;
+        long sb = 0;
+        int m = 0;
+        for (int y = y0; y < y1; y++) {
+            for (int x = x0; x < x1; x++) {
+                int v = rgb[y * stride + x];
+                if (WorkImage.luminance(v) >= lp && (ref == 0 || achromatic(v, ref))) {
+                    sr += (v >> 16) & 0xFF;
+                    sg += (v >> 8) & 0xFF;
+                    sb += v & 0xFF;
+                    m++;
+                }
+            }
+        }
+        int wr = Math.max(20, (int) (sr / m));
+        int wg = Math.max(20, (int) (sg / m));
+        int wb = Math.max(20, (int) (sb / m));
+        return (wr << 16) | (wg << 8) | wb;
+    }
+
+    /** Ist die Farbe v relativ zum Weiß ref (fast) unbunt? */
+    private static boolean achromatic(int v, int ref) {
+        int r = ((v >> 16) & 0xFF) * 255 / Math.max(1, (ref >> 16) & 0xFF);
+        int g = ((v >> 8) & 0xFF) * 255 / Math.max(1, (ref >> 8) & 0xFF);
+        int b = (v & 0xFF) * 255 / Math.max(1, ref & 0xFF);
+        int mx = Math.max(r, Math.max(g, b));
+        int mn = Math.min(r, Math.min(g, b));
+        return mx - mn < 30;
+    }
+
+    /** Papierweiß an einer Seitenposition (mm), bilinear zwischen den Kachelmitten; out = {r, g, b}. */
+    private void whiteAt(double u, double v, int[] out) {
+        double gx = (u - t.field.x) / TILE_MM - 0.5;
+        double gy = (v - t.field.y) / TILE_MM - 0.5;
+        int x0 = (int) Math.floor(gx);
+        int y0 = (int) Math.floor(gy);
+        double fx = Math.max(0, Math.min(1, gx - x0));
+        double fy = Math.max(0, Math.min(1, gy - y0));
+        int xa = Math.max(0, Math.min(tilesX - 1, x0));
+        int xb = Math.max(0, Math.min(tilesX - 1, x0 + 1));
+        int ya = Math.max(0, Math.min(tilesY - 1, y0));
+        int yb = Math.max(0, Math.min(tilesY - 1, y0 + 1));
+        for (int ch = 0; ch < 3; ch++) {
+            int sh = 16 - 8 * ch;
+            double a = ((tileWhite[ya * tilesX + xa] >> sh) & 0xFF) * (1 - fx) + ((tileWhite[ya * tilesX + xb] >> sh) & 0xFF) * fx;
+            double b = ((tileWhite[yb * tilesX + xa] >> sh) & 0xFF) * (1 - fx) + ((tileWhite[yb * tilesX + xb] >> sh) & 0xFF) * fx;
+            out[ch] = Math.max(20, (int) (a * (1 - fy) + b * fy + 0.5));
+        }
+    }
+
+    /** Skalierfaktoren (16.16) für die Normierung auf Papierweiß. */
+    private static void scales(int[] white, int[] k) {
+        k[0] = (255 << 16) / white[0];
+        k[1] = (255 << 16) / white[1];
+        k[2] = (255 << 16) / white[2];
+    }
+
+    /** Klassifiziert eine Probe (Rohwerte), relativ zum Papierweiß (Skalen k aus {@link #scales}). */
+    static int classify(int r0, int g0, int b0, int[] k) {
+        int r = Math.min(255, (r0 * k[0]) >> 16);
+        int g = Math.min(255, (g0 * k[1]) >> 16);
+        int b = Math.min(255, (b0 * k[2]) >> 16);
         int mx = Math.max(r, Math.max(g, b));
         int mn = Math.min(r, Math.min(g, b));
         int c = mx - mn;
@@ -536,33 +672,50 @@ public final class ScanAnalyzer {
             }
             return lum < 110 ? INK : OTHER;
         }
-        return lum < 153 ? INK : PAPER;
+        if (lum < 153) {
+            return INK;
+        }
+        return lum < 196 ? FAINT : PAPER;
     }
 
+    /** Zellen mit blasser, unbunter Tinte (für die Warnung FAINT_LINES). */
+    private boolean[] faint;
+
+    /** Anzahl farbiger Proben im Feld (vor dem Aufräumen) – für die Graustufen-Erkennung. */
+    private long colorSamples;
+
     private Grid classifyField(ScanResult r) {
+        colorSamples = 0;
         int cols = (int) Math.round(t.field.w / CELL_MM);
         int rows = (int) Math.round(t.field.h / CELL_MM);
         Grid g = new Grid(cols, rows, CELL_MM);
         r.workingBytes += g.size();
-        int[] counts = new int[6];
+        int[] counts = new int[7];
+        int[] k = new int[3];
+        faint = new boolean[cols * rows];
+        r.workingBytes += faint.length;
         double step = CELL_MM / SUB;
         for (int cy = 0; cy < rows; cy++) {
             for (int cx = 0; cx < cols; cx++) {
                 if (cx < MARGIN_CELLS || cy < MARGIN_CELLS || cx >= cols - MARGIN_CELLS || cy >= rows - MARGIN_CELLS) {
                     continue;
                 }
-                for (int k = 0; k < counts.length; k++) {
-                    counts[k] = 0;
+                for (int q = 0; q < counts.length; q++) {
+                    counts[q] = 0;
                 }
                 double u0 = t.field.x + cx * CELL_MM + step * 0.5;
                 double v0 = t.field.y + cy * CELL_MM + step * 0.5;
+                whiteAt(u0 + CELL_MM * 0.5, v0 + CELL_MM * 0.5, whiteTmp);
+                scales(whiteTmp, k);
                 for (int sy = 0; sy < SUB; sy++) {
                     for (int sx = 0; sx < SUB; sx++) {
                         sample(u0 + sx * step, v0 + sy * step, kernel, rgbTmp);
-                        counts[classify(rgbTmp[0], rgbTmp[1], rgbTmp[2])]++;
+                        counts[classify(rgbTmp[0], rgbTmp[1], rgbTmp[2], k)]++;
                     }
                 }
                 g.set(cx, cy, decideCell(counts));
+                faint[cy * cols + cx] = counts[FAINT] >= 4;
+                colorSamples += counts[RED] + counts[GREEN] + counts[BLUE];
             }
         }
         return g;
@@ -602,6 +755,31 @@ public final class ScanAnalyzer {
         GridOps.close(g, CellType.WATER, 2, false);
         GridOps.fillEnclosedByWater(g, g.size() / 4);
         GridOps.close(g, CellType.WALL, 2, true);
+        checkFaintLines(g, r);
+    }
+
+    /**
+     * Blasse Linien (z. B. Bleistift), die nicht als Wand zählen: Ränder echter Striche und das
+     * gedruckte Raster ausschließen (Abstand zu erkannten Zellen, Mindestgröße), dann warnen.
+     */
+    private void checkFaintLines(Grid g, ScanResult r) {
+        boolean[] occupied = new boolean[g.size()];
+        for (int i = 0; i < occupied.length; i++) {
+            occupied[i] = g.getIndex(i) != CellType.EMPTY;
+        }
+        boolean[] near = GridOps.dilate(occupied, g.cols, g.rows, 2, false);
+        for (int i = 0; i < faint.length; i++) {
+            faint[i] = faint[i] && !near[i];
+        }
+        int[][] sz = new int[1][];
+        GridOps.label(faint, g.cols, g.rows, sz);
+        for (int k = 0; k < sz[0].length; k++) {
+            if (sz[0][k] >= 15) {
+                r.warn(ScanWarning.FAINT_LINES);
+                break;
+            }
+        }
+        faint = null;
     }
 
     // ================================================================ Start, Loch, Prüfungen
@@ -660,6 +838,10 @@ public final class ScanAnalyzer {
             r.error(ScanError.FIELD_EMPTY);
             return;
         }
+        if (colorSamples == 0 && !colorReferenceIsColored()) {
+            r.error(ScanError.GRAYSCALE_SCAN);
+            return;
+        }
         double[] s = pickDot(g, CellType.START, r, ScanError.NO_START, ScanError.MULTIPLE_STARTS);
         double[] h = pickDot(g, CellType.HOLE, r, ScanError.NO_HOLE, ScanError.MULTIPLE_HOLES);
         r.startDrawn = s;
@@ -703,6 +885,37 @@ public final class ScanAnalyzer {
         }
     }
 
+    /**
+     * Ist das gedruckte Farbkontrollfeld (grüner Kreis im Logo) im Scan farbig? Ohne Kontrollfeld
+     * in der Vorlage gilt der Scan als farbig.
+     */
+    private boolean colorReferenceIsColored() {
+        if (Double.isNaN(t.colorRefX)) {
+            return true;
+        }
+        int[] kk = new int[3];
+        whiteAt(t.colorRefX, t.colorRefY, whiteTmp);
+        scales(whiteTmp, kk);
+        double step = 0.3;
+        int k = Math.max(1, (int) Math.round(map.scale() * step));
+        int colored = 0;
+        int total = 0;
+        for (double dv = -t.colorRefR; dv <= t.colorRefR; dv += step) {
+            for (double du = -t.colorRefR; du <= t.colorRefR; du += step) {
+                if (du * du + dv * dv > t.colorRefR * t.colorRefR) {
+                    continue;
+                }
+                sample(t.colorRefX + du, t.colorRefY + dv, k, rgbTmp);
+                int c = classify(rgbTmp[0], rgbTmp[1], rgbTmp[2], kk);
+                if (c == RED || c == GREEN || c == BLUE || c == OTHER) {
+                    colored++;
+                }
+                total++;
+            }
+        }
+        return colored >= total * 0.3;
+    }
+
     // ================================================================ Par
 
     private void readPar(ScanResult r) {
@@ -716,10 +929,13 @@ public final class ScanAnalyzer {
             SheetTemplate.Box b = boxes[i];
             int ink = 0;
             int total = 0;
+            int[] kk = new int[3];
+            whiteAt(b.x + b.w / 2, b.y + b.h / 2, whiteTmp);
+            scales(whiteTmp, kk);
             for (double v = b.y + b.inset + step / 2; v < b.y + b.h - b.inset; v += step) {
                 for (double u = b.x + b.inset + step / 2; u < b.x + b.w - b.inset; u += step) {
                     sample(u, v, k, rgbTmp);
-                    if (classify(rgbTmp[0], rgbTmp[1], rgbTmp[2]) != PAPER) {
+                    if (classify(rgbTmp[0], rgbTmp[1], rgbTmp[2], kk) != PAPER) {
                         ink++;
                     }
                     total++;
@@ -759,6 +975,9 @@ public final class ScanAnalyzer {
         int k = Math.max(1, (int) Math.round(map.scale() / ppm));
         int[] out = new int[ow * oh];
         r.workingBytes += out.length * 4L;
+        int[] kk = new int[3];
+        whiteAt(b.x + b.w / 2, b.y + b.h / 2, whiteTmp);
+        scales(whiteTmp, kk);
         int ink = 0;
         int minX = ow;
         int minY = oh;
@@ -771,9 +990,9 @@ public final class ScanAnalyzer {
                 } else {
                     sample(x0 + (ox + 0.5) / ppm, y0 + (oy + 0.5) / ppm, k, rgbTmp);
                 }
-                int rr = lutR[rgbTmp[0]];
-                int gg = lutG[rgbTmp[1]];
-                int bb = lutB[rgbTmp[2]];
+                int rr = Math.min(255, (rgbTmp[0] * kk[0]) >> 16);
+                int gg = Math.min(255, (rgbTmp[1] * kk[1]) >> 16);
+                int bb = Math.min(255, (rgbTmp[2] * kk[2]) >> 16);
                 int lum = (77 * rr + 150 * gg + 29 * bb) >> 8;
                 int alpha = (230 - lum) * 255 / 140;
                 if (alpha <= 0) {

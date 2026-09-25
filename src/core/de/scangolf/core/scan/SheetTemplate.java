@@ -53,6 +53,10 @@ public final class SheetTemplate {
     public final Box laneBox;
     public final Box[] parBoxes;
     public final int parDefault;
+    /** Farbkontrollfeld (gedruckt farbig): Mittelpunkt und Abtastradius in mm; NaN, wenn nicht vorhanden. */
+    public final double colorRefX;
+    public final double colorRefY;
+    public final double colorRefR;
 
     private SheetTemplate(Object root) {
         Object page = Json.obj(root, "page");
@@ -86,6 +90,16 @@ public final class SheetTemplate {
                     Json.num(b, "inset", 1.0), (int) Json.num(b, "par"));
         }
         parDefault = (int) Json.num(root, "par_default", 3);
+        if (Json.has(root, "color_ref")) {
+            Object cr = Json.obj(root, "color_ref");
+            colorRefX = Json.num(cr, "cx");
+            colorRefY = Json.num(cr, "cy");
+            colorRefR = Json.num(cr, "sample_r", Json.num(cr, "r") * 0.8);
+        } else {
+            colorRefX = Double.NaN;
+            colorRefY = Double.NaN;
+            colorRefR = Double.NaN;
+        }
     }
 
     private static Box box(Object b) {

@@ -17,6 +17,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.util.Arrays;
 
 /** Einstiegspunkt der PC-Testumgebung. */
 public final class Main {
@@ -36,6 +37,12 @@ public final class Main {
             case "run":
                 run(args);
                 break;
+            case "batch":
+                if (args.length < 2) {
+                    usage();
+                }
+                System.exit(Batch.run(new File(args[1]), !Arrays.asList(args).contains("--ohne-debug")));
+                break;
             case "visual":
                 Visual.main(java.util.Arrays.copyOfRange(args, 1, args.length));
                 break;
@@ -48,6 +55,7 @@ public final class Main {
         System.err.println("Aufruf:");
         System.err.println("  analyze <scan.png> [ausgabeordner]   Scan auswerten, Debug-Bild + Level schreiben");
         System.err.println("  run <scan.png|level.json>           spielen (Swing-Fenster)");
+        System.err.println("  batch <ordner> [--ohne-debug]       alle Bilder eines Ordners auswerten (Tabelle)");
         System.err.println("  visual <ordner>                     Kontrollbilder erzeugen");
         System.exit(2);
     }

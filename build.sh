@@ -6,6 +6,8 @@
 #   ./build.sh run <scan|level>   spielbares Swing-Fenster (800x480, skalierbar)
 #   ./build.sh analyze <scan.png> Scan auswerten, Debug-Bild + Level-Datei schreiben
 #   ./build.sh visual             Debug-Bilder, Spiel-Screenshots, Urkunde nach build/visual
+#   ./build.sh batch <ordner>     alle Scans eines Ordners auswerten (Tabelle + Debug-Bilder)
+#   ./build.sh grenzen            härtere Varianten erzeugen und auswerten (Grenzen der Erkennung)
 #   ./build.sh testimages         Testbilder neu erzeugen (testbilder/out)
 #   ./build.sh template           Vorlage neu erzeugen (vorlage/out)
 #   ./build.sh jar                build/scangolf-core.jar und build/scangolf-pc.jar
@@ -137,6 +139,17 @@ case "$cmd" in
         compile_core; compile_pc
         run_java -cp "$CP" de.scangolf.pc.Main analyze "$@"
         ;;
+    batch)
+        [[ $# -ge 1 ]] || { echo "Aufruf: ./build.sh batch <ordner> [--ohne-debug]" >&2; exit 2; }
+        compile_core; compile_pc
+        run_java -Djava.awt.headless=true -cp "$CP" de.scangolf.pc.Main batch "$@"
+        ;;
+    grenzen)
+        ensure_testimages
+        python3 testbilder/generate_grenzen.py
+        compile_core; compile_pc
+        run_java -Djava.awt.headless=true -cp "$CP" de.scangolf.pc.Main batch testbilder/out/grenzen
+        ;;
     visual)
         compile_core; compile_pc
         ensure_testimages
@@ -163,7 +176,7 @@ case "$cmd" in
         "$0" jar
         ;;
     *)
-        sed -n '2,14p' "$0"
+        sed -n '2,16p' "$0"
         exit 2
         ;;
 esac
