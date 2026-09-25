@@ -250,7 +250,7 @@ WASSER = {
 }
 
 START_NAH_WAND = variant(EX, id="start-nah-wand",
-                         start=[(55.5, 118.0, 4.5)])   # Mitte 6,5 mm neben der Wand bei x=62
+                         start=[(58.0, 118.0, 3.0)])   # Mitte nur ~3 mm neben der Wand bei x=62
 
 NEG_START_IN_WAND = variant(EX, id="start-in-wand", start=[(40.0, 75.0, 5.0)],
                             walls_over=[{"pts": [(40.0, 40.0), (40.0, 110.0)], "w": 4.0}])

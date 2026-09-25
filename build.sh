@@ -95,7 +95,7 @@ compile_all() {
 }
 
 CP="$BUILD/core:$BUILD/pc"
-JAVA_OPTS=(-Xmx2g -Dscangolf.root="$ROOT")
+JAVA_OPTS=(-Xmx2g -Dscangolf.root="$ROOT" -Dfile.encoding=UTF-8 -Dstdout.encoding=UTF-8 -Dstderr.encoding=UTF-8)
 
 run_java() {
     java "${JAVA_OPTS[@]}" "$@" 2> >(quiet_java_filter >&2)

@@ -522,6 +522,10 @@ MM_TO_PT = 72.0 / 25.4
 
 def render_pdf(path, drawing=None):
     surf = cairo.PDFSurface(path, PAGE_W * MM_TO_PT, PAGE_H * MM_TO_PT)
+    # feste Metadaten, damit die PDF bei unveränderter Vorlage bytegleich bleibt
+    surf.set_metadata(cairo.PDFMetadata.TITLE, "ScanGolf-Vorlage")
+    surf.set_metadata(cairo.PDFMetadata.CREATOR, "vorlage/generate.py")
+    surf.set_metadata(cairo.PDFMetadata.CREATE_DATE, "2026-01-01T00:00:00Z")
     ctx = cairo.Context(surf)
     ctx.scale(MM_TO_PT, MM_TO_PT)
     draw_template(ctx)
