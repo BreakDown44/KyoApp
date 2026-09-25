@@ -11,6 +11,7 @@
 #   ./build.sh testimages         Testbilder neu erzeugen (testbilder/out)
 #   ./build.sh template           Vorlage neu erzeugen (vorlage/out)
 #   ./build.sh jar                build/scangolf-core.jar und build/scangolf-pc.jar
+#   ./build.sh dist               PC-Paket (JARs, Startskripte, Vorlage, Level) + Quellcode als ZIP
 #   ./build.sh clean              build/ löschen
 #   ./build.sh all                clean, compile, test, jar
 set -euo pipefail
@@ -164,8 +165,26 @@ case "$cmd" in
     jar)
         compile_core; compile_pc
         jar cf "$BUILD/scangolf-core.jar" -C "$BUILD/core" .
-        jar cfe "$BUILD/scangolf-pc.jar" de.scangolf.pc.Main -C "$BUILD/pc" .
+        # Class-Path im Manifest: "java -jar scangolf-pc.jar" findet den Kern daneben.
+        printf 'Main-Class: de.scangolf.pc.Main\nClass-Path: scangolf-core.jar\n' > "$BUILD/pc-manifest.txt"
+        jar cfm "$BUILD/scangolf-pc.jar" "$BUILD/pc-manifest.txt" -C "$BUILD/pc" .
         echo "Jars: $BUILD/scangolf-core.jar $BUILD/scangolf-pc.jar"
+        ;;
+    dist)
+        # Lauffähiges PC-Paket + Quellcode als ZIP nach build/dist
+        "$0" jar
+        D="$BUILD/dist/scangolf-pc"
+        rm -rf "$BUILD/dist"
+        mkdir -p "$D/vorlage" "$D/levels"
+        cp "$BUILD/scangolf-core.jar" "$BUILD/scangolf-pc.jar" "$D/"
+        cp vorlage/out/scangolf-vorlage.pdf vorlage/out/scangolf-beispiel.pdf \
+           vorlage/out/beispiel-scan-300dpi.png "$D/vorlage/"
+        cp test/levels/*.json "$D/levels/"
+        cp dist/LIESMICH.txt dist/scangolf.sh dist/scangolf.bat "$D/"
+        chmod +x "$D/scangolf.sh"
+        (cd "$BUILD/dist" && zip -qr scangolf-pc.zip scangolf-pc)
+        git archive --format=zip --prefix=scangolf/ -o "$BUILD/dist/scangolf-quellcode.zip" HEAD
+        ls -la "$BUILD/dist"
         ;;
     clean)
         rm -rf "$BUILD"
@@ -176,7 +195,7 @@ case "$cmd" in
         "$0" jar
         ;;
     *)
-        sed -n '2,16p' "$0"
+        sed -n '2,17p' "$0"
         exit 2
         ;;
 esac

@@ -43,6 +43,8 @@ Darstellung, Urkunde, App-Ablauf) und eine **PC-Testumgebung**. Die Anbindung an
 ./build.sh grenzen                  # härtere Varianten erzeugen und auswerten (Grenzen der Erkennung)
 ./build.sh template | testimages    # Vorlage bzw. Testbilder neu erzeugen
 ./build.sh jar | clean | all        # all = clean + test + jar
+./build.sh dist                     # build/dist: scangolf-pc.zip (JARs, Startskripte, Vorlage, Level)
+                                    #             + scangolf-quellcode.zip
 ```
 
 Im Fenster ist die Maus der Finger: Kugel anklicken, nach hinten ziehen, loslassen.

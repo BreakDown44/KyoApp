@@ -1,0 +1,34 @@
+ScanGolf – PC-Testumgebung
+==========================
+
+Voraussetzung: Java 11 oder neuer (java -version).
+
+Starten
+-------
+Linux/macOS:  ./scangolf.sh run vorlage/beispiel-scan-300dpi.png
+Windows:      scangolf.bat run vorlage\beispiel-scan-300dpi.png
+
+Weitere Aufrufe:
+  run                         Startbildschirm, "Scannen" öffnet eine Dateiauswahl
+  run levels/gewunden.json    gespeichertes Level spielen
+  run <scan> --size 1024x600  andere logische Bildschirmgröße
+  analyze <scan.png>          Auswertung ausgeben, <scan>.debug.png und <scan>.level.json schreiben
+  batch <ordner>              alle Bilder eines Ordners auswerten (Tabelle, Debug-Bilder in ordner/debug)
+
+Bedienung: Maus = Finger. Kugel anklicken, nach hinten ziehen, loslassen.
+"Urkunde drucken" speichert die Urkunde als PNG (300 dpi) im Ordner "urkunden".
+
+Inhalt
+------
+scangolf-pc.jar, scangolf-core.jar   Programm (der Kern ist plattformneutral, Java-8-Bytecode)
+vorlage/scangolf-vorlage.pdf         leere Vorlage zum Ausdrucken (A4 quer, in Originalgröße drucken!)
+vorlage/scangolf-beispiel.pdf        ausgefülltes Beispiel
+vorlage/beispiel-scan-300dpi.png     Beispiel als idealer Scan
+levels/*.json                        feste Beispiel-Level
+
+Eigene Scans: Vorlage ausdrucken (100 %, nicht "an Seite anpassen"), Bahn zeichnen
+(Wände schwarz, Start rot, Loch grün, Wasser blau), in FARBE mit 150-300 dpi scannen
+und das Bild mit "run" oder "analyze" öffnen.
+
+Hinweis: Dies ist NICHT das Paket für den Drucker. Die HyPAS-App für die
+ECOSYS MA3500 kann erst gebaut werden, wenn das Kyocera-HyPAS-SDK vorliegt.
