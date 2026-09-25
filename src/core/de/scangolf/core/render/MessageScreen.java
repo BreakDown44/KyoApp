@@ -6,7 +6,7 @@ package de.scangolf.core.render;
  */
 public final class MessageScreen implements Screen {
 
-    /** Wird beim Drücken der Schaltfläche aufgerufen. */
+    /** Wird beim Drücken der Schaltfläche aufgerufen. Ohne Beschriftung gibt es keine Schaltfläche. */
     public interface Listener {
         void onConfirm();
     }
@@ -24,11 +24,13 @@ public final class MessageScreen implements Screen {
         this.height = height;
         this.title = title;
         this.lines = lines;
-        this.button = new Button(buttonLabel, true);
+        this.button = buttonLabel == null ? null : new Button(buttonLabel, true);
         this.listener = l;
-        double bw = Math.min(320, width * 0.4);
-        double bh = Math.max(64, height * 0.15);
-        button.layout((width - bw) / 2, height - bh - height * 0.08, bw, bh);
+        if (button != null) {
+            double bw = Math.min(320, width * 0.4);
+            double bh = Math.max(64, height * 0.15);
+            button.layout((width - bw) / 2, height - bh - height * 0.08, bw, bh);
+        }
     }
 
     public int width() {
@@ -43,6 +45,9 @@ public final class MessageScreen implements Screen {
     }
 
     public void touch(int type, double x, double y) {
+        if (button == null) {
+            return;
+        }
         if (type == Touch.DOWN) {
             pressed = button.hit(x, y);
         } else if (type == Touch.UP) {
@@ -77,6 +82,8 @@ public final class MessageScreen implements Screen {
             }
             y += size * 0.4;
         }
-        button.draw(c, pressed);
+        if (button != null) {
+            button.draw(c, pressed);
+        }
     }
 }

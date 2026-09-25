@@ -27,6 +27,9 @@ public final class GameScreen implements Screen {
 
         /** "Nochmal" wurde gedrückt; die neue Runde läuft bereits. */
         void onPlayAgain(Game newGame);
+
+        /** "Neue Bahn" wurde gedrückt (nur sichtbar, wenn eingeschaltet). */
+        void onNewLevel();
     }
 
     public static final int DEFAULT_WIDTH = 800;
@@ -67,6 +70,8 @@ public final class GameScreen implements Screen {
     private long toastUntil;
     private final Button printButton = new Button("Urkunde drucken", true);
     private final Button againButton = new Button("Nochmal", false);
+    private final Button newLevelButton = new Button("Neue Bahn", false);
+    private boolean newLevelEnabled;
     private Button pressed;
 
     public GameScreen(Level level, int width, int height, Listener listener) {
@@ -91,13 +96,29 @@ public final class GameScreen implements Screen {
         scale = Math.min(availW / level.widthMm(), availH / level.heightMm());
         fieldX = (width - level.widthMm() * scale) / 2;
         fieldY = hudH + margin + (availH - level.heightMm() * scale) / 2;
-        double bw = Math.min(290, width * 0.36);
         double bh = Math.max(64, height * 0.15);
-        double gap = 24;
-        double total = bw + gap + bw * 0.75;
         double by = height / 2.0 + height * 0.19;
-        printButton.layout(width / 2.0 - total / 2, by, bw, bh);
-        againButton.layout(width / 2.0 - total / 2 + bw + gap, by, bw * 0.75, bh);
+        if (newLevelEnabled) {
+            double pw = Math.min(width - 40, 600) - 36;
+            double gap = 14;
+            double bw = (pw - 2 * gap) / 2.6;
+            double x0 = width / 2.0 - pw / 2;
+            printButton.layout(x0, by, bw * 1.2, bh);
+            againButton.layout(x0 + bw * 1.2 + gap, by, bw * 0.7, bh);
+            newLevelButton.layout(x0 + bw * 1.9 + 2 * gap, by, bw * 0.7, bh);
+        } else {
+            double bw = Math.min(290, width * 0.36);
+            double gap = 24;
+            double total = bw + gap + bw * 0.75;
+            printButton.layout(width / 2.0 - total / 2, by, bw, bh);
+            againButton.layout(width / 2.0 - total / 2 + bw + gap, by, bw * 0.75, bh);
+        }
+    }
+
+    /** Dritte Schaltfläche "Neue Bahn" im Ergebnis einblenden (z. B. am Gerät für die nächste Person). */
+    public void setNewLevelButton(boolean enabled) {
+        newLevelEnabled = enabled;
+        layout();
     }
 
     public void newGame() {
@@ -124,7 +145,11 @@ public final class GameScreen implements Screen {
     public void showToast(String text, int argb, long durationMs) {
         toast = text;
         toastColor = argb;
-        toastUntil = now + durationMs;
+        if (lastUpdate < 0) {
+            toastUntil = -durationMs;   // startet mit dem ersten update()
+        } else {
+            toastUntil = now + durationMs;
+        }
     }
 
     /** Pixel je Millimeter der Bahn (logisch). */
@@ -149,6 +174,9 @@ public final class GameScreen implements Screen {
         long elapsed = nowMs - lastUpdate;
         lastUpdate = nowMs;
         now = nowMs;
+        if (toast != null && toastUntil < 0) {
+            toastUntil = now - toastUntil;
+        }
         int steps = clock.advance(elapsed);
         for (int i = 0; i < steps && game.state() == GameState.ROLLING; i++) {
             game.step();
@@ -219,14 +247,19 @@ public final class GameScreen implements Screen {
 
     private void touchResult(int type, double x, double y) {
         if (type == Touch.DOWN) {
-            pressed = printButton.hit(x, y) ? printButton : againButton.hit(x, y) ? againButton : null;
+            pressed = printButton.hit(x, y) ? printButton : againButton.hit(x, y) ? againButton
+                    : newLevelEnabled && newLevelButton.hit(x, y) ? newLevelButton : null;
         } else if (type == Touch.UP) {
             Button b = pressed;
             pressed = null;
             if (b == null || !b.hit(x, y)) {
                 return;
             }
-            if (b == printButton) {
+            if (b == newLevelButton) {
+                if (listener != null) {
+                    listener.onNewLevel();
+                }
+            } else if (b == printButton) {
                 showToast("Urkunde wird gedruckt …", 0xE02E7D32, 2500);
                 if (listener != null) {
                     listener.onPrintCertificate(game);
@@ -253,14 +286,13 @@ public final class GameScreen implements Screen {
         if (dragging && game.state() == GameState.AIMING) {
             drawAim(c);
         } else if (game.state() == GameState.AIMING && finishedAt < 0) {
-            drawBallHint(c);
+            drawBallHint(c, !toastVisible());
         }
         drawHud(c);
-        if (toast != null && now < toastUntil) {
-            drawToast(c);
-        }
         if (resultVisible()) {
             drawResult(c);
+        } else if (toastVisible()) {
+            drawToast(c, hudH + 14, width * 0.9, Math.max(16, height * 0.045));
         }
     }
 
@@ -346,13 +378,17 @@ public final class GameScreen implements Screen {
         c.fillCircle(bx - r * 0.35, by - r * 0.35, r * 0.3, 0xFFFFFFFF);
     }
 
-    private void drawBallHint(Canvas c) {
+    private boolean toastVisible() {
+        return toast != null && now < toastUntil;
+    }
+
+    private void drawBallHint(Canvas c, boolean withText) {
         double bx = toScreenX(game.ballX());
         double by = toScreenY(game.ballY());
         double pulse = 0.5 + 0.5 * Math.sin(now / 260.0);
         double r = Rules.BALL_RADIUS_MM * scale + 10 + 6 * pulse;
         c.strokeCircle(bx, by, r, 3, Colors.withAlpha(0xFFFFFF, (int) (110 + 110 * pulse)));
-        if (!anyShot) {
+        if (!anyShot && withText) {
             String s = "Kugel berühren, nach hinten ziehen, loslassen";
             double size = Math.max(14, height * 0.045);
             while (c.textWidth(s, size, Canvas.FONT_BOLD) + 40 > width * 0.94 && size > 10) {
@@ -448,12 +484,41 @@ public final class GameScreen implements Screen {
         }
     }
 
-    private void drawToast(Canvas c) {
-        double size = Math.max(20, height * 0.05);
-        double tw = c.textWidth(toast, size, Canvas.FONT_BOLD) + 48;
-        double y = hudH + 18;
-        c.fillRoundRect(width / 2.0 - tw / 2, y, tw, size * 1.8, size * 0.9, toastColor);
-        c.text(toast, width / 2.0, y + size * 1.25, size, Canvas.FONT_BOLD, Canvas.ALIGN_CENTER, 0xFFFFFFFF);
+    private void drawToast(Canvas c, double y, double maxW, double size0) {
+        double size = size0;
+        String[] lines = wrap(c, toast, size, maxW - 48);
+        if (lines.length > 3) {
+            size *= 0.8;
+            lines = wrap(c, toast, size, maxW - 48);
+        }
+        double tw = 0;
+        for (int i = 0; i < lines.length; i++) {
+            tw = Math.max(tw, c.textWidth(lines[i], size, Canvas.FONT_BOLD));
+        }
+        tw += 48;
+        double lh = size * 1.3;
+        double bh = lh * lines.length + size * 0.6;
+        c.fillRoundRect(width / 2.0 - tw / 2, y, tw, bh, Math.min(bh / 2, size * 0.9), toastColor);
+        for (int i = 0; i < lines.length; i++) {
+            c.text(lines[i], width / 2.0, y + size * 0.3 + lh * i + size * 1.0, size, Canvas.FONT_BOLD,
+                    Canvas.ALIGN_CENTER, 0xFFFFFFFF);
+        }
+    }
+
+    /** Zeilenumbruch an Leerzeichen. */
+    static String[] wrap(Canvas c, String s, double size, double maxW) {
+        java.util.List<String> out = new java.util.ArrayList<String>();
+        String rest = s;
+        while (rest.length() > 0) {
+            int cut = rest.length();
+            while (cut > 1 && c.textWidth(rest.substring(0, cut), size, Canvas.FONT_BOLD) > maxW) {
+                int sp = rest.lastIndexOf(' ', cut - 1);
+                cut = sp > 0 ? sp : cut - 1;
+            }
+            out.add(rest.substring(0, cut));
+            rest = rest.substring(cut).trim();
+        }
+        return out.toArray(new String[out.size()]);
     }
 
     private void drawResult(Canvas c) {
@@ -487,7 +552,10 @@ public final class GameScreen implements Screen {
         }
         c.text(sub, width / 2.0, py + ph * 0.43, ss, Canvas.FONT_SANS, Canvas.ALIGN_CENTER, 0xFF3A3A2E);
         ArgbImage name = level.nameImage();
-        if (name != null) {
+        if (toastVisible()) {
+            // Rückmeldung (z. B. "Urkunde gedruckt") im Ergebnisfeld statt des Namens
+            drawToast(c, py + ph * 0.47, pw - 40, Math.min(20, height * 0.042));
+        } else if (name != null) {
             double s = Math.min((pw * 0.5) / name.width(), (ph * 0.14) / name.height());
             double w = name.width() * s;
             double h = name.height() * s;
@@ -495,6 +563,9 @@ public final class GameScreen implements Screen {
         }
         printButton.draw(c, pressed == printButton);
         againButton.draw(c, pressed == againButton);
+        if (newLevelEnabled) {
+            newLevelButton.draw(c, pressed == newLevelButton);
+        }
     }
 
     private static double dist(double ax, double ay, double bx, double by) {
@@ -510,6 +581,10 @@ public final class GameScreen implements Screen {
 
     public double[] againButtonCenter() {
         return new double[] {againButton.centerX(), againButton.centerY()};
+    }
+
+    public double[] newLevelButtonCenter() {
+        return new double[] {newLevelButton.centerX(), newLevelButton.centerY()};
     }
 
     public boolean isResultVisible() {

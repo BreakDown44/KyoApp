@@ -1,11 +1,10 @@
 package de.scangolf.pc;
 
-import de.scangolf.core.game.Game;
+import de.scangolf.core.app.ScanGolfApp;
 import de.scangolf.core.level.CellType;
 import de.scangolf.core.level.Level;
 import de.scangolf.core.level.LevelIO;
 import de.scangolf.core.render.GameScreen;
-import de.scangolf.core.render.MessageScreen;
 import de.scangolf.core.util.ArgbImage;
 import de.scangolf.core.scan.ScanAnalyzer;
 import de.scangolf.core.scan.ScanDebug;
@@ -82,58 +81,33 @@ public final class Main {
         return r.isOk() ? 0 : 1;
     }
 
+    /**
+     * Spielen im Fenster über denselben App-Ablauf wie später am Gerät.
+     * Ohne Datei: Startbildschirm, "Scannen" öffnet eine Dateiauswahl.
+     */
     static void run(String[] args) throws IOException {
-        if (args.length < 2) {
-            usage();
-        }
         int w = GameScreen.DEFAULT_WIDTH;
         int h = GameScreen.DEFAULT_HEIGHT;
-        for (int i = 2; i + 1 < args.length; i++) {
-            if (args[i].equals("--size")) {
-                String[] p = args[i + 1].split("x");
+        File in = null;
+        for (int i = 1; i < args.length; i++) {
+            if (args[i].equals("--size") && i + 1 < args.length) {
+                String[] p = args[++i].split("x");
                 w = Integer.parseInt(p[0]);
                 h = Integer.parseInt(p[1]);
+            } else {
+                in = new File(args[i]);
             }
-        }
-        File in = new File(args[1]);
-        Level level;
-        if (in.getName().endsWith(".json")) {
-            level = LevelIO.fromJson(new String(Files.readAllBytes(in.toPath()), StandardCharsets.UTF_8));
-        } else {
-            Images.Raw raw = Images.load(in);
-            ScanResult r = new ScanAnalyzer().analyze(raw.argb, raw.width, raw.height);
-            printResult(in.getName(), r);
-            if (!r.isOk()) {
-                String[] lines = new String[r.errors().size()];
-                for (int i = 0; i < lines.length; i++) {
-                    lines[i] = r.errors().get(i).message();
-                }
-                GameWindow.open("ScanGolf", new MessageScreen(w, h, "Scan nicht erkannt", lines, "Beenden",
-                        () -> System.exit(1)));
-                return;
-            }
-            level = r.level();
         }
         File outDir = new File(System.getProperty("scangolf.root", "."), "urkunden");
-        GameScreen[] screen = new GameScreen[1];
-        screen[0] = new GameScreen(level, w, h, new GameScreen.Listener() {
-            @Override
-            public void onPrintCertificate(Game game) {
-                try {
-                    File f = CertificateExport.save(game, outDir);
-                    System.out.println("Urkunde gespeichert: " + f);
-                    screen[0].showToast("Urkunde gespeichert: " + f.getName(), 0xE02E7D32, 4000);
-                } catch (IOException e) {
-                    screen[0].showToast("Fehler beim Speichern: " + e.getMessage(), 0xE0C62828, 4000);
-                }
-            }
-
-            @Override
-            public void onPlayAgain(Game newGame) {
-                System.out.println("Neue Runde");
-            }
-        });
-        GameWindow.open("ScanGolf", screen[0]);
+        boolean levelFile = in != null && in.getName().endsWith(".json");
+        ScanGolfApp app = new ScanGolfApp(w, h, new ScanAnalyzer(), new PcServices.FileScan(levelFile ? null : in),
+                new PcServices.PngPrint(outDir), new PcServices.Today());
+        if (levelFile) {
+            app.play(LevelIO.fromJson(new String(Files.readAllBytes(in.toPath()), StandardCharsets.UTF_8)));
+        } else if (in != null) {
+            app.startScan();
+        }
+        GameWindow.open("ScanGolf", app);
     }
 
     /** Kontrollbild der Auswertung (verkleinerter Scan mit Overlays und Infospalte). */

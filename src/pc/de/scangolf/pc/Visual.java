@@ -1,5 +1,8 @@
 package de.scangolf.pc;
 
+import de.scangolf.core.app.PrintService;
+import de.scangolf.core.app.ScanGolfApp;
+import de.scangolf.core.app.ScanService;
 import de.scangolf.core.cert.Certificate;
 import de.scangolf.core.game.Game;
 import de.scangolf.core.game.GameState;
@@ -29,6 +32,7 @@ public final class Visual {
         File root = new File(System.getProperty("scangolf.root", "."));
         scans(out, root);
         game(out, root);
+        app(out, root);
     }
 
     static void scans(File out, File root) throws IOException {
@@ -212,6 +216,39 @@ public final class Visual {
         }
         gaveUp.giveUp();
         saveCert(out, "urkunde-ohne-namen.png", Certificate.fromGame(gaveUp, 31, 12, 2026));
+    }
+
+    /** Screenshots des gesamten App-Ablaufs (Start, Erkennung, Fehler, Hinweis, Ergebnis). */
+    static void app(File out, File root) throws IOException {
+        File imgs = new File(root, "testbilder/out");
+        String[] queue = {"neg-start-fehlt.png", "bahn-par-keins.png"};
+        int[] next = {0};
+        ScanService scan = cb -> {
+            try {
+                Images.Raw raw = Images.load(new File(imgs, queue[next[0]++]));
+                cb.scanned(raw.argb, raw.width, raw.height);
+            } catch (IOException e) {
+                cb.failed(e.getMessage());
+            }
+        };
+        PrintService print = (c, cb) -> cb.printed("Urkunde gedruckt");
+        ScanGolfApp a = new ScanGolfApp(800, 480, new ScanAnalyzer(), scan, print, () -> new int[] {2026, 9, 25});
+        long t = advance(a, 0, 50);
+        shot(a, out, "app-01-start.png", 1.0);
+        a.startScan();
+        shot(a, out, "app-02-erkennen.png", 1.0);
+        t = advance(a, t, 100);
+        shot(a, out, "app-03-fehler.png", 1.0);
+        a.startScan();
+        t = advance(a, t, 300);
+        shot(a, out, "app-04-hinweis.png", 1.0);
+        a.gameScreen().game().giveUp();
+        t = advance(a, t, 800);
+        double[] p = a.gameScreen().printButtonCenter();
+        a.touch(Touch.DOWN, p[0], p[1]);
+        a.touch(Touch.UP, p[0], p[1]);
+        advance(a, t, 300);
+        shot(a, out, "app-05-ergebnis-gedruckt.png", 1.0);
     }
 
     static void saveCert(File out, String name, Certificate c) throws IOException {

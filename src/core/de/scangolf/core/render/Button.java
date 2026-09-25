@@ -48,6 +48,9 @@ public final class Button {
         }
         int fg = primary ? 0xFFFFFFFF : 0xFF1F5F30;
         double size = Math.min(h * 0.4, 28);
+        while (size > 10 && c.textWidth(label, size, Canvas.FONT_BOLD) > w - 24) {
+            size -= 1;
+        }
         c.text(label, x + off + w / 2, y + off + h / 2 + size * 0.36, size, Canvas.FONT_BOLD, Canvas.ALIGN_CENTER, fg);
     }
 }

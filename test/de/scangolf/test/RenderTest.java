@@ -171,6 +171,11 @@ public class RenderTest {
             public void onPlayAgain(Game newGame) {
                 calls[1]++;
             }
+
+            @Override
+            public void onNewLevel() {
+                calls[1] += 100;
+            }
         });
         s.update(0);
         s.game().giveUp();
@@ -197,18 +202,24 @@ public class RenderTest {
         Level l = TestLevels.load("beispiel");
         int[][] sizes = {{800, 480}, {1024, 600}, {480, 272}, {1280, 720}, {800, 600}};
         for (int[] sz : sizes) {
-            for (int phase = 0; phase < 4; phase++) {
+            for (int phase = 0; phase < 6; phase++) {
                 GameScreen s = new GameScreen(l, sz[0], sz[1], null);
+                s.setNewLevelButton(phase >= 3);
                 s.update(0);
+                if (phase == 4 || phase == 5) {
+                    s.showToast(de.scangolf.core.scan.ScanWarning.FAINT_LINES.message(), 0xE0B26A00, 5000);
+                }
                 double bx = s.toScreenX(l.startX());
                 double by = s.toScreenY(l.startY());
                 if (phase == 1) {
                     s.touch(Touch.DOWN, bx, by);
                     s.touch(Touch.MOVE, bx - 50, by + 70);
-                } else if (phase >= 2) {
+                } else if (phase == 2 || phase == 3 || phase == 5) {
                     s.game().giveUp();
                     s.update(16);
                     s.update(2000);
+                } else {
+                    s.update(16);
                 }
                 final int ph = phase;
                 BufferedImage img = Offscreen.render(sz[0], sz[1], 1.0, c -> {
@@ -217,6 +228,26 @@ public class RenderTest {
                     Check.isFalse(rec.nonFinite, "keine NaN-Koordinaten");
                     List<RecordingCanvas.Op> out = rec.outside("text", 1);
                     Check.isTrue(out.isEmpty(), sz[0] + "x" + sz[1] + " Phase " + ph + ": Text außerhalb " + out);
+                    List<RecordingCanvas.Op> texts = new java.util.ArrayList<>();
+                    for (RecordingCanvas.Op o : rec.ops) {
+                        if (o.kind.equals("text")) {
+                            texts.add(o);
+                        }
+                    }
+                    for (int i = 0; i < texts.size(); i++) {
+                        for (int j = i + 1; j < texts.size(); j++) {
+                            RecordingCanvas.Op a = texts.get(i);
+                            RecordingCanvas.Op b = texts.get(j);
+                            boolean overlap = a.x0 < b.x1 - 1 && b.x0 < a.x1 - 1 && a.y0 < b.y1 - 1 && b.y0 < a.y1 - 1;
+                            Check.isFalse(overlap, sz[0] + "x" + sz[1] + " Phase " + ph + ": Texte überlappen: " + a + " / " + b);
+                        }
+                    }
+                    for (RecordingCanvas.Op o : rec.ops) {
+                        if (o.kind.equals("text") && (o.text.equals("Urkunde drucken") || o.text.equals("Nochmal")
+                                || o.text.equals("Neue Bahn"))) {
+                            Check.isTrue(o.x1 - o.x0 < sz[0] * 0.4, "Schaltflächentext passt: " + o);
+                        }
+                    }
                 });
                 Check.isTrue(distinctColors(img, 5) > 20, "Bild hat Inhalt");
             }
