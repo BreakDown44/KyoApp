@@ -1,0 +1,21 @@
+# Build-Ausgaben
+/build/
+*.class
+*.jar
+
+# generierte Testbilder und Ausgaben der PC-Umgebung
+/testbilder/out/
+*.debug.png
+*.level.json
+/urkunden/
+
+# Python
+__pycache__/
+*.pyc
+
+# Editor/OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
+*~
