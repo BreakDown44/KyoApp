@@ -26,7 +26,7 @@ public final class ScanAnalyzer {
     /** Zellen am Feldrand, die ignoriert werden (dort liegt der gedruckte Rahmen). */
     static final int MARGIN_CELLS = 2;
     /** Auflösung der Namens-/Bahnausschnitte. */
-    static final double CROP_PX_PER_MM = 8.0;
+    static final double CROP_PX_PER_MM = 12.0;
     /** Mindestgröße eines roten/grünen Punkts in Zellen (mm²). */
     static final int MIN_DOT_CELLS = 6;
     /** Füllgrad, ab dem ein Par-Kästchen als angekreuzt gilt. */
@@ -443,6 +443,28 @@ public final class ScanAnalyzer {
         out[2] = sb / n;
     }
 
+    /** Bilinear interpolierte Farbe an der Seitenposition (u, v) in mm. */
+    private void sampleBilinear(double u, double v, int[] out) {
+        double fx = map.mapX(u, v) - 0.5;
+        double fy = map.mapY(u, v) - 0.5;
+        int x0 = (int) Math.floor(fx);
+        int y0 = (int) Math.floor(fy);
+        double ax = fx - x0;
+        double ay = fy - y0;
+        x0 = Math.max(0, Math.min(imgW - 2, x0));
+        y0 = Math.max(0, Math.min(imgH - 2, y0));
+        int p00 = px[y0 * imgW + x0];
+        int p10 = px[y0 * imgW + x0 + 1];
+        int p01 = px[(y0 + 1) * imgW + x0];
+        int p11 = px[(y0 + 1) * imgW + x0 + 1];
+        for (int ch = 0; ch < 3; ch++) {
+            int sh = 16 - 8 * ch;
+            double a = ((p00 >> sh) & 0xFF) * (1 - ax) + ((p10 >> sh) & 0xFF) * ax;
+            double b = ((p01 >> sh) & 0xFF) * (1 - ax) + ((p11 >> sh) & 0xFF) * ax;
+            out[ch] = (int) (a * (1 - ay) + b * ay + 0.5);
+        }
+    }
+
     /** Papierweiß: mittlere Farbe der hellsten 20 % der Zellmitten im Feld. */
     private void estimatePaper(ScanResult r) {
         int cols = (int) Math.round(t.field.w / CELL_MM);
@@ -744,7 +766,11 @@ public final class ScanAnalyzer {
         int maxY = -1;
         for (int oy = 0; oy < oh; oy++) {
             for (int ox = 0; ox < ow; ox++) {
-                sample(x0 + (ox + 0.5) / ppm, y0 + (oy + 0.5) / ppm, k, rgbTmp);
+                if (k == 1) {
+                    sampleBilinear(x0 + (ox + 0.5) / ppm, y0 + (oy + 0.5) / ppm, rgbTmp);
+                } else {
+                    sample(x0 + (ox + 0.5) / ppm, y0 + (oy + 0.5) / ppm, k, rgbTmp);
+                }
                 int rr = lutR[rgbTmp[0]];
                 int gg = lutG[rgbTmp[1]];
                 int bb = lutB[rgbTmp[2]];

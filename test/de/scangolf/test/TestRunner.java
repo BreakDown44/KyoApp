@@ -22,6 +22,7 @@ public final class TestRunner {
 
     private int passed;
     private int failed;
+    private int skipped;
     private final List<String> failures = new ArrayList<>();
     private final String filter = System.getProperty("test.filter", "");
 
@@ -34,8 +35,8 @@ public final class TestRunner {
         long ms = (System.nanoTime() - t0) / 1_000_000;
         System.out.println();
         System.out.println("==================================================");
-        System.out.printf("Tests gesamt: %d   bestanden: %d   fehlgeschlagen: %d   (%.1f s)%n",
-                r.passed + r.failed, r.passed, r.failed, ms / 1000.0);
+        System.out.printf("Tests gesamt: %d   bestanden: %d   fehlgeschlagen: %d   übersprungen: %d   (%.1f s)%n",
+                r.passed + r.failed + r.skipped, r.passed, r.failed, r.skipped, ms / 1000.0);
         if (!r.failures.isEmpty()) {
             System.out.println("Fehlgeschlagen:");
             for (String f : r.failures) {
@@ -43,9 +44,8 @@ public final class TestRunner {
             }
         }
         System.out.println("==================================================");
-        if (r.failed > 0 || r.passed == 0) {
-            System.exit(1);
-        }
+        // Immer explizit beenden: nach dem Fenstertest laufen sonst AWT-Threads weiter.
+        System.exit(r.failed > 0 || r.passed == 0 ? 1 : 0);
     }
 
     private void runClass(Class<?> cls) throws Exception {
@@ -110,6 +110,9 @@ public final class TestRunner {
             long ms = (System.nanoTime() - t0) / 1_000_000;
             passed++;
             System.out.printf("PASS  %-60s %6d ms%n", name, ms);
+        } catch (TestSkipped s) {
+            skipped++;
+            System.out.printf("SKIP  %-60s (%s)%n", name, s.getMessage());
         } catch (Throwable t) {
             record(name, t, (System.nanoTime() - t0) / 1_000_000);
         }

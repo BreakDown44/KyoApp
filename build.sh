@@ -119,7 +119,13 @@ case "$cmd" in
         compile_all
         ensure_testimages
         classes=$(cd "$BUILD/test" && find . -name '*Test.class' | sed 's#^\./##; s#\.class$##; s#/#.#g' | sort)
-        run_java -cp "$CP:$BUILD/test" de.scangolf.test.TestRunner $classes
+        # Fenstertest braucht ein Display: ohne DISPLAY virtuell per xvfb-run, sonst SKIP.
+        if [[ -z "${DISPLAY:-}" ]] && command -v xvfb-run >/dev/null 2>&1; then
+            xvfb-run -a -s "-screen 0 1280x800x24" java "${JAVA_OPTS[@]}" -cp "$CP:$BUILD/test" \
+                de.scangolf.test.TestRunner $classes 2> >(quiet_java_filter >&2)
+        else
+            run_java -cp "$CP:$BUILD/test" de.scangolf.test.TestRunner $classes
+        fi
         ;;
     run)
         [[ $# -ge 1 ]] || { echo "Aufruf: ./build.sh run <scan.png|level.json>" >&2; exit 2; }
