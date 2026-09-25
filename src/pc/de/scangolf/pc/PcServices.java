@@ -32,7 +32,9 @@ public final class PcServices {
             File f = next;
             next = null;
             if (f == null) {
-                JFileChooser ch = new JFileChooser(new File(System.getProperty("scangolf.root", "."), "testbilder/out"));
+                File root = new File(System.getProperty("scangolf.root", "."));
+                File start = new File(root, "testbilder/out");
+                JFileChooser ch = new JFileChooser(start.isDirectory() ? start : root);
                 ch.setFileFilter(new FileNameExtensionFilter("Scans (PNG, JPEG)", "png", "jpg", "jpeg"));
                 if (ch.showOpenDialog(null) != JFileChooser.APPROVE_OPTION) {
                     cb.failed("Kein Bild ausgewählt.");

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=ScanGolf
+GenericName=Minigolf
+Comment=Minigolf auf selbst gezeichneten und gescannten Bahnen
+Exec=scangolf run
+Icon=scangolf
+Terminal=false
+Categories=Game;SportsGame;

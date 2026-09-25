@@ -1,0 +1,16 @@
+#!/bin/sh
+# ScanGolf – PC-Testumgebung (installiert aus dem .deb-Paket).
+#   scangolf                         Startbildschirm, "Scannen" öffnet eine Dateiauswahl
+#   scangolf run <scan.png|level>    Scan auswerten und spielen / Level spielen
+#   scangolf analyze <scan.png> [ordner]   Auswertung, Debug-Bild, Leveldatei
+#   scangolf batch <ordner>          alle Bilder eines Ordners auswerten
+# Urkunden landen in ~/ScanGolf/urkunden (anderer Ort: SCANGOLF_HOME setzen).
+DATA=/usr/share/scangolf
+WORK="${SCANGOLF_HOME:-$HOME/ScanGolf}"
+mkdir -p "$WORK"
+# Vorlage und Beispiel-Level beim ersten Start in den Arbeitsordner kopieren
+[ -d "$WORK/vorlage" ] || cp -r "$DATA/vorlage" "$WORK/"
+[ -d "$WORK/levels" ] || cp -r "$DATA/levels" "$WORK/"
+[ $# -eq 0 ] && set -- run
+exec java -Xmx2g -Dscangolf.root="$WORK" -Dfile.encoding=UTF-8 -Dstdout.encoding=UTF-8 \
+    -jar "$DATA/scangolf-pc.jar" "$@"

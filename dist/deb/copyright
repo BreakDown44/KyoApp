@@ -1,0 +1,9 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: scangolf
+Source: https://github.com/BreakDown44/KyoApp
+
+Files: *
+Copyright: ScanGolf-Projekt
+License: noch nicht festgelegt
+ Für dieses Projekt wurde noch keine Lizenz vergeben. Bis dahin gilt:
+ alle Rechte vorbehalten.

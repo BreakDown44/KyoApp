@@ -1,0 +1,17 @@
+Package: scangolf
+Version: @VERSION@
+Section: games
+Priority: optional
+Architecture: all
+Depends: default-jre (>= 2:1.11) | java11-runtime
+Installed-Size: @SIZE@
+Maintainer: ScanGolf-Projekt <scangolf@localhost>
+Homepage: https://github.com/BreakDown44/KyoApp
+Description: Minigolf auf selbst gezeichneten Bahnen (PC-Testumgebung)
+ Eine Minigolf-Bahn wird auf einer A4-Vorlage gezeichnet (Wände schwarz,
+ Start rot, Loch grün, Wasser blau) und gescannt; ScanGolf erkennt daraus
+ ein Level, das mit der Maus gespielt wird. Am Ende entsteht eine Urkunde
+ als PNG mit 300 dpi.
+ .
+ Dies ist die PC-Testumgebung. Die Version für Kyocera-Multifunktionsdrucker
+ (HyPAS) ist nicht enthalten.

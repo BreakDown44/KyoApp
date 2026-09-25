@@ -11,6 +11,7 @@
 #   ./build.sh testimages         Testbilder neu erzeugen (testbilder/out)
 #   ./build.sh template           Vorlage neu erzeugen (vorlage/out)
 #   ./build.sh jar                build/scangolf-core.jar und build/scangolf-pc.jar
+#   ./build.sh deb                Debian/Ubuntu-Paket build/deb/scangolf_<version>_all.deb
 #   ./build.sh dist               PC-Paket (JARs, Startskripte, Vorlage, Level) + Quellcode als ZIP
 #   ./build.sh clean              build/ löschen
 #   ./build.sh all                clean, compile, test, jar
@@ -170,6 +171,30 @@ case "$cmd" in
         jar cfm "$BUILD/scangolf-pc.jar" "$BUILD/pc-manifest.txt" -C "$BUILD/pc" .
         echo "Jars: $BUILD/scangolf-core.jar $BUILD/scangolf-pc.jar"
         ;;
+    deb)
+        # Debian/Ubuntu-Paket (Architektur "all", braucht eine Java-11+-Laufzeit)
+        command -v dpkg-deb >/dev/null || { echo "dpkg-deb fehlt" >&2; exit 1; }
+        "$0" jar
+        VERSION="${VERSION:-0.1.0}"
+        P="$BUILD/deb/scangolf_${VERSION}_all"
+        rm -rf "$BUILD/deb"
+        mkdir -p "$P/DEBIAN" "$P/usr/bin" "$P/usr/share/scangolf/vorlage" "$P/usr/share/scangolf/levels" \
+                 "$P/usr/share/applications" "$P/usr/share/icons/hicolor/256x256/apps" "$P/usr/share/doc/scangolf"
+        cp "$BUILD/scangolf-core.jar" "$BUILD/scangolf-pc.jar" "$P/usr/share/scangolf/"
+        cp vorlage/out/scangolf-vorlage.pdf vorlage/out/scangolf-beispiel.pdf \
+           vorlage/out/beispiel-scan-300dpi.png "$P/usr/share/scangolf/vorlage/"
+        cp test/levels/*.json "$P/usr/share/scangolf/levels/"
+        install -m 755 dist/deb/scangolf "$P/usr/bin/scangolf"
+        install -m 644 dist/deb/scangolf.desktop "$P/usr/share/applications/"
+        python3 dist/deb/make_icon.py "$P/usr/share/icons/hicolor/256x256/apps/scangolf.png"
+        install -m 644 dist/deb/copyright dist/LIESMICH.txt README.md "$P/usr/share/doc/scangolf/"
+        SIZE=$(du -sk "$P/usr" | cut -f1)
+        sed "s/@VERSION@/$VERSION/; s/@SIZE@/$SIZE/" dist/deb/control > "$P/DEBIAN/control"
+        find "$P" -type d -exec chmod 755 {} +
+        find "$P/usr/share" -type f -exec chmod 644 {} +
+        dpkg-deb --root-owner-group --build "$P" "$BUILD/deb/" >/dev/null
+        ls -la "$BUILD/deb/"*.deb
+        ;;
     dist)
         # Lauffähiges PC-Paket + Quellcode als ZIP nach build/dist
         "$0" jar
@@ -195,7 +220,7 @@ case "$cmd" in
         "$0" jar
         ;;
     *)
-        sed -n '2,17p' "$0"
+        sed -n '2,18p' "$0"
         exit 2
         ;;
 esac
